@@ -1,1 +1,2 @@
-x <- 1
+x <- runif(100, 1, 100)
+mean_x <- round(mean(x), 2)
