@@ -45,3 +45,4 @@ income_summary
 ##Ex.3
 x <- matrix(data=round(runif(n,min = 1,max = 100)), nrow = 5, ncol = 5)
 mean <- mean
+hello <- "hello"
