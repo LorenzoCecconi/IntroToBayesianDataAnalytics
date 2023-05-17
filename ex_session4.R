@@ -3,7 +3,7 @@ library(tidyverse)
 # draw 10,000 values from a beta distribution with shape parameters a = 4 and b = 4.
 n <- 1e4
 scale <- 1.5e4
-income <- round( rbeta(n=n, shape1=2, shape2=12) * scale, 2)
+income <- round( rbeta(n=n, shape1=4, shape2=4) * scale, 2)
 
 
 # Plot the resulting curve
