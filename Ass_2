@@ -1,0 +1,208 @@
+# Assignment 2 - Introduction to Bayesian Data Analysis
+# Lorenzo Cecconi - 03778923
+
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+
+### Task 1 ### 
+
+data <- data.frame(Company = c('A','B','C'), Satisfaction = c(.70, .50, .80)) # create a data frame with the 3 companies and their relative customer satisfaction
+data <- add_column(data, rev_likely = c(.25,.5,.25)) # add to the data frame a column with the probability for which company the new reviews are for
+reviews <- c(rep('P', times=6),rep('N', times= 4)) # vector containing the new reviews 
+sum(reviews == 'P') # number of positive reviews 
+
+P_6P4N_givenA <- dbinom(6,10,0.7) # probability of occurance of the reviews if they were for Company A, using the dbinom function to obtain 6 P out of 10 reviews with the probability relative to the company (0.7)
+P_6P4N_givenB <- dbinom(6,10,0.5) # probability of occurance of the reviews if they were for Company B, using the dbinom function to obtain 6 P out of 10 reviews with the probability relative to the company (0.5)
+P_6P4N_givenC <- dbinom(6,10,0.8) # probability of occurance of the reviews if they were for Company C, using the dbinom function to obtain 6 P out of 10 reviews with the probability relative to the company (0.8)
+
+P_6P4N <- data$rev_likely[data$Company=='A'] *P_6P4N_givenA + 
+  data$rev_likely[data$Company=='B'] * P_6P4N_givenB + 
+  data$rev_likely[data$Company=='C'] * P_6P4N_givenC 
+# calculates the probability of obtaining 6 P and 4 N considering the prior probabilities
+
+P_A_given6P4N <- data$rev_likely[data$Company=='A'] * P_6P4N_givenA / P_6P4N
+# calculates the posterior probability using Bayes' rule, considering the prior probability for A (.25), 
+# the likelihood (probability of obtaining 6P and 4N for company A),and the probability of the obtained reviews considering all companies 
+P_A_given6P4N # prints the desired probability
+round(P_A_given6P4N, digits = 2) == .29 # cheching if the posterior probability is equal to .29
+
+### Task 2 ###
+
+reviews2 <- c(rep('P', times = 9), 'N') # new 10 reviwes
+reviews_tot <- c(reviews,reviews2) # adds the new revies to the old ones
+sum(reviews_tot == 'P') # number of positive reviwes
+
+P_B_given6P4N <- data$rev_likely[data$Company=='B'] * P_6P4N_givenB / P_6P4N # calculates the posterior probability of B only considering the first 10 reviews
+P_B_given6P4N # prints the post probability of B
+P_C_given6P4N <- data$rev_likely[data$Company=='C'] * P_6P4N_givenC / P_6P4N # calculates the posterior probability of C only considering the first 10 reviews
+P_C_given6P4N # prints the post probability of C
+
+
+
+### In this solution all the 20 reviews are considered to compute the likelihood, resulting in a 33% increase of the posterior prob for C as demonstrated with the following code ###
+P_15P5N_givenA <- dbinom(15,20,.7) # probability of occurance of all of the 20 reviews if they were for Company A
+P_15P5N_givenB <- dbinom(15,20,.5) # probability of occurance of all of the 20 reviews if they were for Company B
+P_15P5N_givenC <- dbinom(15,20,0.8) # probability of occurance of all of the 20 reviews if they were for Company C
+
+P_15P5N <- data$rev_likely[data$Company=='A'] *P_15P5N_givenA + 
+  data$rev_likely[data$Company=='B'] * P_15P5N_givenB + 
+  data$rev_likely[data$Company=='C'] * P_15P5N_givenC
+# calculates the probability of obtaining 15 P and 5 N considering the prior probabilities
+
+P_C_given15P5N <- data$rev_likely[data$Company=='C'] * P_15P5N_givenC / P_15P5N
+# calculates the posterior probability (using Bayes' rule) that the reviews were for Company C knowing we obtaind 15P and 5N over all 20 reviews
+
+increase <- P_C_given15P5N - P_C_given6P4N # calculates the increase in the probability after the 10 new reviews 
+increase # prints the increase value
+round(increase, digits = 2) == .33 # checks if the increase in equal to 33%
+
+### In the following solution only the last 10 reviews are considered to compute the likelihood, and the post probabilities of the first 10 reviews are used as prior probabilities this time (it's like calculating the probability of getting 9P and 1N after getting 6P and 4N)
+P_9P1N_givenA <- dbinom(9,10,0.7) # probability of occurance of the 10 new reviews if they were for company A
+P_9P1N_givenB <- dbinom(9,10,0.5) # probability of occurance of the 10 new reviews if they were for company B
+P_9P1N_givenC <- dbinom(9,10,0.8) # probability of occurance of the 10 new reviews if they were for company C
+ 
+P_9P1N_after_6P4N <- P_A_given6P4N *P_9P1N_givenA + # calculates the probability of getting 9P1N after getting 6P4N, whatever the company to receive the reviews is
+  P_B_given6P4N * P_9P1N_givenB +                   # as we can see, the posterior probability after the first 10 reviews is used
+  P_C_given6P4N * P_9P1N_givenC
+
+P_C_given15P5N2 <- P_9P1N_givenC * P_C_given6P4N/ P_9P1N_after_6P4N # calculates the updated posterior probability for C (with Bayes' rule), using the likelihood of the 10 new reviews * the post probability of getting 6P4N for C / the probability of getting 9P1N after 6P4N
+P_C_given15P5N2 # prints the probability
+increase2 <- P_C_given15P5N2 - P_C_given6P4N # calculates the increase of post probability for C
+increase2 # prints the increase
+round(increase2, digits = 2) == .33 # checks if the increase is equal to .33
+increase == increase2 # checks if the increase obtained with the two methods is the same (gives FALSE, although they are the same, probably because of some approximation of the PC)
+
+### Task 3 ###
+
+factory <- data.frame(Factory = c('A', 'B'), Prob = c(0.5, 0.5), Defective = c(0.1,0.2)) # creates the data frame containing info about the Factories
+
+# the probability the shipment is defective is given by the probability it comes from A and it's defective + the probability it comes from B and it's defective
+P_defective <- factory$Prob[factory$Factory=='A'] * factory$Defective[factory$Factory=='A'] + factory$Prob[factory$Factory=='B'] * factory$Defective[factory$Factory=='B']
+P_defective # prints the probability that the shipment is defective, not knowing if it comes from factory A or B
+
+# considering that Event 1 (first shipment defective) and Event 2 (second shipment defective) are independent events, P(E2|E1) is simply equal to P(E2)
+P_defship2_givendefship1 <- P_defective
+P_defship2_givendefship1 # prints the probability
+
+### Task 5 ###
+
+factory <- cbind(factory, Algorithm = c(0.8,0.65)) # adds the info about the algorithm correcteness in the  factory data frame
+
+# first we don't include the defective info
+
+P_AlgA <- factory$Algorithm[factory$Factory=='A'] * factory$Prob[factory$Factory=='A'] + (1-factory$Algorithm[factory$Factory=='B']) * factory$Prob[factory$Factory=='B']
+# calculates the probability that the algorithm says that the shipment is from A, 
+# which happens when the shipment is actually from A and the algorithm is correct + when the shipment is actually form B but the algorithm is incorrect, saying is from A instead
+P_AlgA # prints the probability that the algorithm returns 'A'
+
+P_A_AlgA <- factory$Algorithm[factory$Factory=='A'] * factory$Prob[factory$Factory=='A'] / P_AlgA
+# using Bayes' theorem we can calculate the probaility that the shipment is actually from Factory A knowing the algorithm said so. 
+# The likelihood is the probability the algorithm returns 'A' knowing it's from A (.8), the prior probability is .5, while the probability the algorithm returns 'A' was computed before (.575) 
+P_A_AlgA # Prints the requested probability
+
+### now let's consider the defective products info
+# using the Bayes' theorem we have that P(A|AlgA&def) = P(AlgA&def|A)*P(A)/P(AlgA&def)
+
+P_AlgA_def <- P_AlgA * P_defective # the probability that the shipment is attributed to Factory A by the algorithm and that there are defective products is the product of the two probabilities, as the events are independent
+
+P_AlgA_def_givenA <- factory$Algorithm[factory$Factory=='A']*factory$Defective[factory$Factory=='A']
+# knowing that the shipment is from Factory A, we just need to multiply the probabilies of occurance of the two events for factory A: defects(.1) and algorithm saying A (.8)
+
+# so the Probability of the shipment being from Factory A, knowing it contains defective parts and the algorithm said it's from A is:
+P_A_givenAlgA_def <- P_AlgA_def_givenA * factory$Prob[factory$Factory=='A']/P_AlgA_def
+P_A_givenAlgA_def # prints the probability
+
+
+### Task 6 ###
+
+# definition of the prior distribution
+theta <- seq(0,1,by= 0.001) # defines 1000 values of theta between 0 and 1, theta represents the percentage of earth covered by land
+alpha <- 3 # first parameter for the beta distribution
+beta <- 6 # second parameter for the beta distribution
+prior_distribution <- dbeta(theta, shape1 = alpha,shape2 = beta) # defines the prior distribution using a beta function (which fits well as we want to study a proportion, with values between 0 and 1), alpha and beta are respectively equal to 3 and 6 in order to obtain a mean value for theta of 33%,
+# which is around the percentage of earth covered by land as we know from common knowledge (one-third), and also the standard deviation value of 0.1490712 still guarantees a certain level of uncertainty, as we will see in the graph
+
+summary <- data.frame(theta, prior_distribution) # defines the data frame of theta and prior distribution in order to plot the curve
+
+ggplot(summary, aes(x=theta, y=prior_distribution))+ # plots the prior distribution, having the theta value on the x-axes and the density of the prior distribution on the y-axes 
+  geom_line(linewidth=1,linetype="dashed")+ # characteristics of the curve
+  labs(x=expression(theta), # adds labels to the axes
+       y="Density")+
+  theme_minimal()+
+  geom_line(aes(x=alpha/(alpha+beta)), color='red', linetype="dashed") # plots the mean value for theta, using the definition of mean for a beta distribution (alphaa/(alpha+beta)), in this case 0.33
+
+### Task 7 ###
+
+n0 <- 10000 # number of random samples we want
+set.seed(1234) # setting a seed 
+sample <- data.frame(sample = rbeta(n0, alpha, beta)) # creates a vector (data frame) of 10000 samples using the rbeta distribution with parameters alpha (3) and beta (6)
+
+# plots still the prior distribution curve and adds the density curve of the 10000 samples 
+ggplot(summary)+  
+  geom_line(linewidth=1,linetype="dashed",
+            aes(x=theta, y=prior_distribution))+
+  geom_density(data = sample, aes(x=sample), # this line adds the density curve of the 10000 samples
+               color='blue',linewidth=1)+
+  labs(x=expression(theta), 
+       y="Density")+
+  theme_minimal()
+
+### Task 8 ###
+
+#given code
+prop <- seq(0, 1, length.out = 12)
+priors <- vector("numeric", length(prop))
+for (i in seq_along(prop)){
+  priors[i] <- round( sum(sample >= prop[i] & sample < prop[i+1]) / 1e4 , 2)
+}
+poss <- tibble(prop_L = seq(0, 1, .1),
+               prior = priors[1:11])
+
+
+globe_tosses <- c(rep('L',times=26),rep('W',times=100-26)) # creates vectore of the 100 globe tosses
+L <- length(globe_tosses[globe_tosses=='L']) # counts the number of 'land' obtained in the 100 globe tosses
+N <- length(globe_tosses) # number of globe tosses (100)
+poss <- cbind(poss, likelihood =c(NA)) # adds a column to the data frame where to put the likelihood for every possible proportion of land
+
+for (i in 0:10) {   # cicle for to fill the data frame with the likelihood of the data (the 100 globe tosses where we have 26 'L'), relative to every different value of p
+  poss[1+i,3] <- dbinom(x = L, size = N, p = 0.1*i) # calculates the likelihood of the data using the dbinom function, given size 100, L equal to 26 and p from 0 to 1 (0, 0.1, 0.2, ..., 1)
+}
+poss$likelihood # prints the likelihood values
+
+# to compute the posterior probabilities we can use Bayes' theorem -> post = likelihood * prior (data is given)
+
+poss <- cbind(poss, post = c(poss$likelihood*poss$prior)) # adds the posterior probabilities, calculated using Bayes' theorem, to the data frame  
+poss$post # prints the posterior probabilities
+
+poss <- cbind(poss, post_norm = c(poss$post/sum(poss$post))) # adds the normalized posterior probability to the data frame, in order to have the sum of the normalized posterior probability equal to 1
+poss$post_norm # prints the normalized posterior probability
+
+### Task 9 ###
+
+n_samples <- 1000 # numer of samples wanted
+
+samples <- sample(poss$prop_L, n_samples, replace=TRUE, prob = poss$post_norm) # creates a vector of 1000 samples of possible land proportion using the normalized posterior probabilities relative to every possibility
+# replace is set to 'TRUE' in order to to make 1000 samples, having sampling with replacement
+
+### Task 10 ###
+
+n_tosses <- 100 # number of tosses 
+post_pred_distribution <- vector(mode = 'numeric', length = n_samples) # creates a vectore where to put the outcome of the 1000 predicted tosses (number of 'land' obtained)
+set.seed(1234)
+
+for (i in 1:n_samples) {    # cicle for to fill the vector 
+  post_pred_distribution[i] <- rbinom(1, n_tosses, samples[i]) # uses a rbinom function to predict the outcomes, with one observation each time, 100 tosses, and probabilities taken from the sample vector
+}
+post_pred_distribution # prints the outcomes
+mean(post_pred_distribution) # prints the mean of the outcomes
+sd(post_pred_distribution) # prints the standard deviation of the outcomes
+
+
+ggplot(data.frame(post_pred_distribution), aes(x = post_pred_distribution))+ # plots the desired posterior predictive distribution for the numer of lands, putting the number of lands on the x-axes
+  geom_histogram( color='#F8766D', fill='#F8766D', alpha=0.5, bins = 100)+ # creates an histogram, representing the frequencies of occurance of the number of lands over the 1000 samples 
+  labs(x = 'Number of Lands', y= 'Frequency')+ # adds labes to the axes
+  scale_x_continuous(limits = c(0,n_tosses))+ # expands the x-axes to all values from 0 to 100, instead of only considering the values occured, in order to better compare the graph to the prior graphs
+  theme_minimal()
+  
+
