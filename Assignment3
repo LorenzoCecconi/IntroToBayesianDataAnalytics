@@ -1,0 +1,274 @@
+# Assignment 3 - Introduction to Bayesian Data Analysis
+# Lorenzo Cecconi - 03778923
+
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(rethinking)
+
+### Task 1 ###
+
+data <- read.csv('Aging.csv', sep = ',', header = TRUE)
+# creates a dataset from the Aging excel, considering ','(comma) as separator between data, and setting header = TRUE in order to consider the first row as containing the names of the variables
+
+### Task 2 ###
+
+data <- na.omit(data)
+# this functions deletes all the rows containing at least one 'NA' value, in this case 4 rows are deleted
+
+### Task 3 ###
+
+summary(data) # gives an overview of the values of the 6 variables, giving min and max value, mean and median, and 1st and 3rd quartile
+
+plot(data$Age) # plotting the age data we can see there are two distinct groups, one aged under30 and the other one aged over60
+hist(data$Age)
+plot(data$RiskSeeking) # with this plot we see that all values are between .25 and .75. As we can see in the histogram, it could be a normal or beta distribution
+hist(data$RiskSeeking)
+plot(data$DecisionQuality) # for the decision quality variable we can observe more a normal distribution of the data
+hist(data$DecisionQuality)
+plot(data$Speed) # from the plot we might identify two main groups of speed, while from the histogram we can observe more lika a normal distribution with pretty high variance
+hist(data$Speed)
+plot(data$NegAffect) # this variable seems more distributed as a beta distribution (using a different scale like 0-10 instead of 0-1 as the classic beta distribution)
+hist(data$NegAffect)
+plot(data$Numeracy) # for the numeracy variable it seems more like a beta distribution with concentration of values towards 1 (alpha bigger than beta)
+hist(data$Numeracy)
+
+# from plottig the variable Age we observed two groups of people (under30 and over60), which will be respectively group 1 = young and group 2 = old
+for (i in 1:length(data$Age)) {
+  if(data$Age[i]<45){
+    data$AG[i] <- 1 
+  } else {
+    data$AG[i] <- 2
+  }
+}
+# the cicle for adds to all rows the value for the new variable 'AG', using as a threshold for the Age 45 (we could actually have used any value between 31 and 62 as there are no observations in that range)
+max(data$Age[data$AG==1]) # shows that the oldest young is 30
+min(data$Age[data$AG==2]) # shows that the younger elderly is 62
+plot(data$AG, data$Age) # the plot verifies the difference in age of the two groups
+
+### Task 4 ###
+
+# To estimate the Gaussian models of both the variables a beta function could be used as it allows a range of values between 0 and 1, which well fits the nature of these two variables, which are percentage values. 
+# Anyway from the plots in task 3 we can surely see that the distributions seems much more like normal distributions (there's a double check for RiskSeeking in the following code), which we will use to estimate the Gaussian models (the standard deviation values, which will be obtained, guarantee the distribution to be in the range 0-1)
+
+# For the DecisionQuality variable a good distribution could be the normal distribution from what was seen in the histogram in Task 3.
+# For the mean still a dnorm with mean .6, which seems the most recurrent value in the histogram, while the st. dev. is set quite high guaranteeing that the value will be in the interval with a high level of confidence.
+# For the standard deviation a dunif function is used, with a very wide interval (0-.3)
+m_DQ <- quap(
+  alist(DecisionQuality ~ dnorm(mu, sigma),
+        mu ~ dnorm(.6,.2),
+        sigma ~ dunif(0,.3)),
+  data = data
+)
+precis(m_DQ) # with this line of code we can observe the output of fitting the model with the data of DecisionQuality from the dataset. we observe a mean of .65 and a sigma of .09, both of them with very low s.d. 
+
+hist(data$RiskSeeking, xlim = range(0,1)) # plots againg the histogram of the risk seeking data, but this time considering all the possible range of values between 0 and 1. We can see this times it seems much more a normal distribution than a beta distribution
+shapiro.test(data$RiskSeeking) # shapiro test to check the normal distribution of the observations, which confirms 
+
+# For the SeekSeeking variable still a normal distribution is used to estimate the Gaussian model.
+# For the mean we still use a dnorm function with mean .5, and s.d. 0.15, a little lower than for the DecisionQiuality variable as the data seems a bit more compact.
+# For the s. d. still a uniform function is used, with a range between 0 and .2
+m_RS <- quap(
+  alist(RiskSeeking ~ dnorm(mu, sigma),
+        mu ~ dnorm(.5,.15),
+        sigma ~ dunif(0,.2)),
+  data = data
+)
+precis(m_RS) # We can see the output of the model, which has a mean value of .47 and a s.d. of .09, still both with very low sd of .01
+
+set.seed(1234)
+m_DQ_smp <- extract.samples(m_DQ, n = 1e4) # extracts 10000 samples from the model of DecisionQuality 
+m_RS_smp <- extract.samples(m_RS, n = 1e4) # extracts 10000 samples from the model of RiskSeeking
+
+HPDI(m_DQ_smp$mu, prob = 0.95) # prints the intervals for the 95% highest posterior probability (.6337 - .6655)
+HPDI(m_RS_smp$mu, prob = 0.95) # prints the intervals for the 95% highest posterior probability (.4545 - .4860)
+
+# From the estimation of the Decision Quality (mean = 0.65) we can observe that around 2/3 of the people choose the option with higher expectation, so they are trying to maximize the expected return of the choice (summation of the return of every event 'times' its probability of occurance). 
+# If we also observe the sd value (0.09) we can say that, with a confidence of around 95%, people prefer this kind of solution, maximazing their expected return for at least 50% of the choices they take.
+# Instead for the RiskSeeking variable (mean = 0.47) we notice that less than half of the people choose the risky option, althought this might represent the best option in term of DecisionQuality (max expected value).
+plot(data$DecisionQuality,data$RiskSeeking)
+cor(data$RiskSeeking,data$DecisionQuality)
+# If we actually look at the plot of the to variables, and performing the correlation between them we notice a moderate correlation (cor = 0.41) between them. This means that people opting for the max expected value option are more likely to choose the riskier option, when this one maximizes their return. 
+
+### Task 5 ###
+
+# Gaussian model for young people, as we expect to obtain a silimar result as for the whole group (because there should be no difference between young and old), the parameters used for the model are the same, with the exception of the data considered, which refers only to group 1
+m_DQ_young <- quap(
+  alist(DecisionQuality ~ dnorm(mu, sigma),
+        mu ~ dnorm(.6,.2),
+        sigma ~ dunif(0,.3)),
+  data = data[data$AG==1,]
+)
+precis(m_DQ_young) # as expected we observe values very similar to those for the hole group. Mean = .66 (+0.01) and sd = 0.07 (-0.02)
+
+# The same is done for the old group, obtaining the same mean (0.65) and sd(0.09) as for the whole group
+m_DQ_old <- quap(
+  alist(DecisionQuality ~ dnorm(mu, sigma),
+        mu ~ dnorm(.6,.2),
+        sigma ~ dunif(0,.3)),
+  data = data[data$AG==2,]
+)
+precis(m_DQ)
+
+length(data$Age[data$AG==1])
+length(data$Age[data$AG==2])
+# to check the validity of the models we want to see how big the two groups are. In this case they are exactly the same number (59). 
+
+set.seed(1234)
+m_DQ_smp_young <- extract.samples(m_DQ_young, n = 10000) # extracts 10000 samples from the Gaussian model for DecisionQuality of young people
+m_DQ_smp_old <- extract.samples(m_DQ_old, n = 10000) # extracts 10000 samples from the Gaussian model for DecisionQuality of old people
+
+m_DQ_smp_diff <- data.frame(m_DQ_smp_young[,1] - m_DQ_smp_old[,1]) # calculates the difference of the 10000 samples
+mean(m_DQ_smp_diff[,1]) # prints the mean difference of the 10000 samples, which is very low (0.0187)
+
+plot(m_DQ_smp_diff[,1])
+hist(m_DQ_smp_diff[,1])
+# from the plots we can also see that there is no difference in the two populations, or if there is, it's really low (slightly higher for young people, but still <0.05, as we can observe from the following line of code)
+HPDI(m_DQ_smp_diff, prob = 0.95) # interval -0.0138 to 0.0508
+
+### Task 6 ### 
+
+std_data <- scale(data[,-7]) # creates a new data set, standardizing all variables except AG
+std_data <- cbind(std_data, AG=data[,7]) # adds the AG info to the standardized dataset
+std_data <- data.frame(std_data) # transforms the data set in a data frame
+
+### Task 7 ###
+
+# Fitting models for DecisionQuality
+plot(std_data$Numeracy, std_data$DecisionQuality) # plots the stardardized variables, in order to make some predictions on the parameters of the linear models (ranges of a, b and sigma)
+# the following string of code creates the linear model for DecisionQuality using the Numeracy variable. Still a Normal distribution is used to estimate the DQ, but this time there's a linear relationship between the mu of the normal and the Numeracy variable (mu = a + b * Num).
+lm_DQ_Num <- quap(
+  alist(
+    DecisionQuality ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * Numeracy, # linear model
+    a ~ dnorm(0,1), # from the plot we expect a to be around 0, st. dev. is set to 1 as we noticed most of the values are in range -2 to 2  
+    b ~ dnorm(0.5,0.5), # still from the plot we probably expect a positive slope, but it's not so evident, also it doesn't seem a very strong relationship |b|<1. That's why we set mu = 0.5 and s.d too
+    sigma ~ dunif(0,2) # the sd range is wide, as from the plot we can't see a clear linear 'path' of the observations, so we might have quite high values for sigma
+  ),
+  data = std_data) # model done on standardized data
+precis(lm_DQ_Num) # prints the output of the linear model (a = 0, b = 0.36, sigma = 0.93, all sd are < .1)
+
+plot(std_data$Speed, std_data$DecisionQuality) # plot of the two standardied variables
+# for the linear model to predict DecisionQuality using Speed a dnorm function is still used with a linear relationship between mu and Speed (mu = a + b * Speed)
+lm_DQ_Speed <- quap(
+  alist(
+    DecisionQuality ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * Speed, # linear model
+    a ~ dnorm(0,1), # we can do more or less the same considerations as for the Numeracy variable
+    b ~ dnorm(0.5,0.5), 
+    sigma ~ dunif(0,2)
+  ),
+  data = std_data)
+precis(lm_DQ_Speed) # prints the output of the linear model (a = 0, b = 0.23, sigma = 0.97, all sd are < .1)
+
+plot(std_data$NegAffect, std_data$DecisionQuality) # in this case from the plot there seems to be a slightly negative correlation
+# the same setup as before is used  for the prior distributions
+lm_DQ_NegAff <- quap(
+  alist(
+    DecisionQuality ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * NegAffect, # linear model
+    a ~ dnorm(0,1),
+    b ~ dnorm(-0.5,0.5), # we expect a slightly negative value for b in this case
+    sigma ~ dunif(0,2)
+  ),
+  data = std_data)
+precis(lm_DQ_NegAff) # as we expected there's a slightly negative correlation (b = -0.15), while a is still 0 and sigma is 0.99
+
+# fitting these 3 linear models for the DecisionQuality variable we identify that the variable having the strongest total effect is the Numeracy variable (b = 0.36).
+# We could actually have done some prior considerations on the relationships between DecisionQuality and the other variables:
+# 1. Numeracy -> we expect a positive relationship between the better ability to operate with numeric information and the quality of the decisions taken (higher expectation). In fact b = 0.36
+# 2. Speed -> also in this case higher speed (better cognitive ability) would suggest a positive relationship with Decision Quality. We obtained b = 0.23
+# 3. NegAffect -> in this case we would expect a negative relationship between a negative emotional state and the Decision Quality. We obtain -0.15
+
+# Fitting models for Risk Seeking
+plot(std_data$Numeracy, std_data$RiskSeeking) # from the plot we might expect a slightly negative relationship
+# To fit the model, the same as for the DecisionQuality variable is done, fitting a normal function for the RiskSeeking variable, with a linear model for the relative mu, and the priors for a, b and sigma
+lm_RS_Numeracy <- quap(
+  alist(
+    RiskSeeking ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * Numeracy, # linear model
+    a ~ dnorm(0,1), 
+    b ~ dnorm(-0.5,0.5), 
+    sigma ~ dunif(0,2)
+  ),
+  data = std_data
+)
+precis(lm_RS_Numeracy) # as expected we obtain a value of a = 0, b = -0.14 and sigma 0.99
+
+plot(std_data$Speed, std_data$RiskSeeking) # from the plot we also expect a slightly negative relationship betweeen the variables
+lm_RS_Speed <- quap(
+  alist(
+    RiskSeeking ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * Speed, # linear model
+    a ~ dnorm(0,1), 
+    b ~ dnorm(-0.5,0.5), 
+    sigma ~ dunif(0,2)
+  ),
+  data = std_data
+)
+precis(lm_RS_Speed) # as expected we obtain a = 0, b = -0.13, sigma = 0.99
+
+plot(std_data$NegAffect, std_data$RiskSeeking) # also here we expect a negative relationship
+lm_RS_NegAff <- quap(
+  alist(
+    RiskSeeking ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b * NegAffect, # linear model
+    a ~ dnorm(0,1), 
+    b ~ dnorm(-0.5,0.5), 
+    sigma ~ dunif(0,2)
+  ),
+  data = std_data
+)
+precis(lm_RS_NegAff) # we obtain a = 0, b = -0.29, sigma = 0.96
+
+# fitting these 3 linear models for the RiskSeeking variable we identify that the variable having the strongest total effect is the NegAffect variable (b = -0.29).
+# We could actually have done some prior considerations on the relationships between RiskSeeking and the other variables:
+# 1. Numeracy -> we expect a negative relationship between the better ability to operate with numeric information and the propensity to risk. In fact b = -0.14
+# 2. Speed -> also in this case higher speed (better cognitive ability) would suggest a negative relationship with Decision Quality. We obtained b = -0.13
+# 3. NegAffect -> in this case I would have expected maybe a positive relationship between the two variable, instead the from the linear model emerges a negative relationship, actually the strongest of the three, which could actually be explained as people in a negative emotional state are more adverse to take any other risk. In fact b = -0.29
+
+# Advantages of using standardized variables:
+# 1. The first one is for sure removing scale differencies, which makes the variables much more easy to be compared. To demonstrate so we can also try to fit a model between DecisionQuality and Speed (very different scales)
+test <- quap(
+  alist(
+    DecisionQuality ~ dnorm(mu, sigma),
+    mu <- a + b * Speed,
+    a ~ dunif(-100,100),
+    b ~ dunif(-20,20),
+    sigma ~ dunif(0,100)
+  ),
+  data = data
+)
+precis(test)
+# we obtain b = 0. This suggests there's no relationship between the variables. The problem is that having variables with very different scales (DQ in range 0.4-1, Speed in range 20-90) the model isn't able to perceive the relationship, probably ascribing possible relationshp to variability.
+# Another thing we can notice using standardized variables is that in all fitted models a = 0. This is because standardizing we are centering all variables' means to 0.
+# 2. Another advantage is the possibility of better interpreting the coeficcients obtained. This is because we can now compare changes in response to a one-st-dev change in the variable. This is very helpful for very diffent scale variables, as in our case, where it would be impossible to do so without standardized variables (as demonstrated right above in point 1)
+
+### Task 8 ###
+
+# We might expect the Numeracy variable to be cofounder of Speed and DecisionQuality, as the ability to operate with numeric information should influence (positively) both processing speed and quality of the decisions. We already proved the second influence (Numeracy on DecisionQuality) in task 7. (Num --> Speed & Num --> DQ)
+# At the same time we also expect Speed to have an influence on DecisionQuality, making Speed mediator between Numeracy and DecisionQuality (Num --> Speed --> DQ)
+# We will then built a model to estimate the mean of DecisionQuality as linear function of Speed and Numeracy.
+
+lm_DQ_Num_Speed <- quap(
+  alist(
+    DecisionQuality ~ dnorm(mu, sigma), # likelihood
+    mu <- a + b_num * Numeracy + b_spd * Speed, # linear model
+    a ~ dnorm(0,1), # for a, b_num, b_spd and sigma we use the same priority distributions as we expected in task 7
+    b_num ~ dnorm(0.5,0.5),
+    b_spd ~ dnorm(0.5,0.5),
+    sigma ~ dunif(0,3)
+  ),
+  data = std_data
+)
+precis(lm_DQ_Num_Speed) # Running the results we obtain as expected a = 0 (because standardized data). The value of b_num is equal to 0.32, while the value of b_spd is equal to 0.12.
+precis(lm_DQ_Speed)
+precis(lm_DQ_Num)
+# We can notice how b_num hasn't much changed from the model with only Numeracy as predictor (b=0.36), while the b_spd has decreased (0.12 vs 0.23), probably stating the higher relevance of Numeracy when controlling for the Numeracy variable. 
+# The relationship between Numeracy and speed can also been proved by running the correlation between the two variables, which is equal to 0.37 (moderate correlation)
+cor(std_data$Numeracy, std_data$Speed)
+plot(std_data$Numeracy, std_data$Speed)
+# The results confirm our expectations: direct influence of Numeracy on DecisionQuality and a lower influence of the Speed variable. Also this one is correlated to the Numeracy variable, making it a confounder. This model permits ase to understand how much of the effect on DecisionQuality is directly due to Numeracy and, studying the relationship Numeracy-Speed, the indirect effect through Speed, comparing th new model with the one predictor ones.  
+
+
+
